@@ -1,5 +1,7 @@
 # 🚋 TramTram Bot
 
+[English version below](#english-version)
+
 Bot Telegram per il monitoraggio in tempo reale dei mezzi pubblici di Torino (GTT) tramite API OpenTripPlanner (Muoversi a Torino).
 
 ## Funzionalità
@@ -33,7 +35,7 @@ tramtram/
 
 ```bash
 # 1. Clona il repository
-git clone https://github.com/tuo-utente/tramtram.git
+git clone https://github.com/lucaosti/tramtram.git
 cd tramtram
 
 # 2. Crea e attiva il virtual environment
@@ -142,6 +144,167 @@ I messaggi fermata includono un bottone inline **🛑 STOP**. Premendolo il mess
 🚏  PORTA NUOVA  (40)
 ⏱  08:32:15
 ⏳  scade tra 14 min
+
+  🚌  42  ➜  SASSI
+        ⏳  🟢5'   🟢18'   32'
+
+  🚌  66  ➜  LINGOTTO
+        ⏳  🟢2'   12'
+
+  🚌  4  ➜  FALCHERA
+        ⏳  🟢8'
+
+[🛑 STOP]
+```
+
+---
+
+# English version
+
+## 🚋 TramTram Bot (English)
+
+Telegram bot for real-time monitoring of Turin public transport (GTT) via OpenTripPlanner API (Muoversi a Torino).
+
+### Features
+
+- **Live dashboard** – One Telegram message per trip, updated every 15 seconds with upcoming arrivals.
+- **Quick stop info** – Send a stop ID (number) in chat to see all arrivals, updated live for 15 minutes with a **STOP** button to close.
+- **Config wizard** – Use `/aggiungi` and `/elimina` to manage trips and combos directly from Telegram, no file editing needed.
+- **Persistent state** – All active messages are saved in `state.json` and survive restarts. On startup, previous messages are deleted (no orphaned chat messages).
+- **Trips & Combos** – Configure multi-leg trips with boarding and alighting stops.
+- **Automatic names** – Stop and destination names (headsign) are fetched from the API.
+- **Night pause** – No API calls during the configured interval (default 02:00–07:00).
+
+### Structure
+
+```
+tramtram/
+├── main.py              # Main bot
+├── config.json          # Configuration (git-ignored)
+├── requirements.txt     # Python dependencies
+├── state.json           # Persistent state (auto-generated, git-ignored)
+├── README.md
+└── .gitignore
+```
+
+### Requirements
+
+- Python 3.10+
+- A Telegram bot (created via [@BotFather](https://t.me/BotFather))
+
+### Installation
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/lucaosti/tramtram.git
+cd tramtram
+
+# 2. Create and activate the virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Create config.json (see Configuration section)
+```
+
+### Configuration (`config.json`)
+
+```json
+{
+  "telegram": {
+    "bot_token": "TOKEN_FROM_BOTFATHER",
+    "chat_id": 123456789
+  },
+  "otp_base_url": "https://plan.muoversiatorino.it/otp/routers/mato/index",
+  "polling_interval_seconds": 15,
+  "night_pause": { "start_hour": 2, "end_hour": 7 },
+  "trips": [
+    {
+      "name": "Home → Office",
+      "combos": [
+        {
+          "name": "Direct 42",
+          "legs": [
+            {
+              "line": "42",
+              "stop_id_boarding": "1132",
+              "stop_id_alighting": "40"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `telegram.bot_token` | Bot token from BotFather |
+| `telegram.chat_id` | Chat ID to send messages |
+| `otp_base_url` | Base API URL for OTP Muoversi a Torino |
+| `polling_interval_seconds` | Update interval in seconds (default: 15) |
+| `night_pause.start_hour` | Night pause start (default: 2) |
+| `night_pause.end_hour` | Night pause end (default: 7) |
+| `trips` | List of trips to monitor |
+
+#### Trip structure
+
+```
+Trip (e.g. "Home → Office")
+ └── Combo (e.g. "Direct 42", "Combo 16 + 4")
+      └── Leg
+           ├── line                (e.g. "42")
+           ├── stop_id_boarding    (boarding stop)
+           └── stop_id_alighting   (alighting stop)
+```
+
+To find GTT `stop_id`: send the stop number to the bot, or search on [Muoversi a Torino](https://www.muoversiatorino.it/).
+
+### Usage
+
+```bash
+python main.py
+```
+
+#### Telegram commands
+
+| Command | Description |
+|---|---|
+| `/start` | Create the dashboard with automatic updates |
+| `/refresh` | Force an immediate dashboard update |
+| `<number>` | Send a number to see all arrivals at that stop (15 min, with STOP button) |
+| `/aggiungi` | Wizard to add a new trip or combo |
+| `/elimina` | Wizard to delete a trip or combo |
+| `/annulla` | Cancel the current wizard |
+
+#### STOP button
+
+Stop messages include an inline **🛑 STOP** button. Pressing it deletes the message from chat and removes it from tracking.
+
+### Example output
+
+##### Dashboard
+
+```
+🚋  Office → Home
+⏱  08:32:15
+
+━━━  Direct 42  ━━━
+
+  🚌  42
+        OSPEDALE MAURIZIANO  ➜  PORTA NUOVA
+        ⏳  🟢3'   🟢15'   30'
+```
+
+##### Quick stop info
+
+```
+🚏  PORTA NUOVA  (40)
+⏱  08:32:15
+⏳  expires in 14 min
 
   🚌  42  ➜  SASSI
         ⏳  🟢5'   🟢18'   32'
