@@ -9,10 +9,14 @@ venv/
 .venv/
 env/
 
-# Config con credenziali
-config.json
+# Secrets
+.env
 
-# Stato persistente
+# Per-user data
+data/
+
+# Legacy single-user files
+config.json
 state.json
 
 # IDE

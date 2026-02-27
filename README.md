@@ -1,295 +1,66 @@
-# 🚋 TramTram Bot
+# 🚋 TramTram
 
-[English version below](#english-version)
+Real-time Turin public transport (GTT) tracker on Telegram.
 
-Bot Telegram per il monitoraggio in tempo reale dei mezzi pubblici di Torino (GTT) tramite API OpenTripPlanner (Muoversi a Torino).
+**Just want to use it?** Open [@tramtramgtt\_bot](https://t.me/tramtramgtt_bot) on Telegram and press Start — no setup needed.
 
-## Funzionalità
-
-- **Cruscotto live** – Un messaggio Telegram per ogni viaggio, aggiornato automaticamente ogni 15 secondi con i prossimi arrivi configurati.
-- **Fermata rapida** – Invia un numero (stop ID) in chat per vedere tutti i mezzi in arrivo, aggiornato live per 15 minuti con bottone **STOP** per chiudere.
-- **Wizard configurazione** – Comandi `/aggiungi` e `/elimina` per gestire viaggi e combo direttamente da Telegram, senza toccare i file.
-- **Stato persistente** – Tutti i messaggi attivi vengono salvati in `state.json` e sopravvivono ai riavvii. All'avvio i messaggi precedenti vengono cancellati (niente orfani in chat).
-- **Viaggi & Combo** – Configura viaggi multi-tratta con fermata di salita e discesa.
-- **Nomi automatici** – Nomi fermata e destinazioni (headsign) derivati dall'API.
-- **Pausa notturna** – Nessuna chiamata API nell'intervallo configurato (default 02:00–07:00).
-
-## Struttura
-
-```
-tramtram/
-├── main.py              # Bot principale
-├── config.json          # Configurazione (git-ignored)
-├── requirements.txt     # Dipendenze Python
-├── state.json           # Stato persistente (auto-generato, git-ignored)
-├── README.md
-└── .gitignore
-```
-
-## Requisiti
-
-- Python 3.10+
-- Un bot Telegram (creato via [@BotFather](https://t.me/BotFather))
-
-## Installazione
-
-```bash
-# 1. Clona il repository
-git clone https://github.com/lucaosti/tramtram.git
-cd tramtram
-
-# 2. Crea e attiva il virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# 3. Installa le dipendenze
-pip install -r requirements.txt
-
-# 4. Crea config.json (vedi sezione Configurazione)
-```
-
-## Configurazione (`config.json`)
-
-```json
-{
-  "telegram": {
-    "bot_token": "TOKEN_DA_BOTFATHER",
-    "chat_id": 123456789
-  },
-  "otp_base_url": "https://plan.muoversiatorino.it/otp/routers/mato/index",
-  "polling_interval_seconds": 15,
-  "night_pause": { "start_hour": 2, "end_hour": 7 },
-  "trips": [
-    {
-      "name": "Casa → Ufficio",
-      "combos": [
-        {
-          "name": "Diretto 42",
-          "legs": [
-            {
-              "line": "42",
-              "stop_id_boarding": "1132",
-              "stop_id_alighting": "40"
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-| Campo | Descrizione |
-|---|---|
-| `telegram.bot_token` | Token del bot da BotFather |
-| `telegram.chat_id` | ID della chat dove inviare i messaggi |
-| `otp_base_url` | URL base API OTP Muoversi a Torino |
-| `polling_interval_seconds` | Intervallo di aggiornamento in secondi (default: 15) |
-| `night_pause.start_hour` | Inizio pausa notturna (default: 2) |
-| `night_pause.end_hour` | Fine pausa notturna (default: 7) |
-| `trips` | Lista dei viaggi da monitorare |
-
-### Struttura dei viaggi
-
-```
-Trip (es. "Casa → Ufficio")
- └── Combo (es. "Diretto 42", "Combo 16 + 4")
-      └── Leg
-           ├── line                (es. "42")
-           ├── stop_id_boarding    (fermata di salita)
-           └── stop_id_alighting   (fermata di discesa)
-```
-
-Per trovare gli `stop_id` GTT: invia il numero della fermata al bot, oppure cerca su [Muoversi a Torino](https://www.muoversiatorino.it/).
-
-## Utilizzo
-
-```bash
-python main.py
-```
-
-### Comandi Telegram
-
-| Comando | Descrizione |
-|---|---|
-| `/start` | Crea il cruscotto viaggi con aggiornamento automatico |
-| `/refresh` | Forza un aggiornamento immediato del cruscotto |
-| `<numero>` | Invia un numero per vedere tutti i mezzi in arrivo alla fermata (15 min, con bottone STOP) |
-| `/aggiungi` | Wizard per aggiungere un nuovo viaggio o combo |
-| `/elimina` | Wizard per eliminare un viaggio o una combo |
-| `/annulla` | Annulla il wizard in corso |
-
-### Bottone STOP
-
-I messaggi fermata includono un bottone inline **🛑 STOP**. Premendolo il messaggio viene cancellato dalla chat e rimosso dal tracciamento.
-
-## Esempio di output
-
-### Cruscotto
-
-```
-🚋  Ufficio → Casa
-⏱  08:32:15
-
-━━━  Diretto 42  ━━━
-
-  🚌  42
-        OSPEDALE MAURIZIANO  ➜  PORTA NUOVA
-        ⏳  🟢3'   🟢15'   30'
-```
-
-### Fermata rapida
-
-```
-🚏  PORTA NUOVA  (40)
-⏱  08:32:15
-⏳  scade tra 14 min
-
-  🚌  42  ➜  SASSI
-        ⏳  🟢5'   🟢18'   32'
-
-  🚌  66  ➜  LINGOTTO
-        ⏳  🟢2'   12'
-
-  🚌  4  ➜  FALCHERA
-        ⏳  🟢8'
-
-[🛑 STOP]
-```
+If the hosted bot is no longer available, you can self-host your own instance using this repository (see [Self-hosting](#self-hosting) below).
 
 ---
 
-# English version
+## What it does
 
-## 🚋 TramTram Bot (English)
+TramTram monitors GTT bus and tram arrivals in real time via the [Muoversi a Torino](https://www.muoversiatorino.it/) OpenTripPlanner API and keeps Telegram messages updated in place every 15 seconds.
 
-Telegram bot for real-time monitoring of Turin public transport (GTT) via OpenTripPlanner API (Muoversi a Torino).
+Each user gets their own independent dashboard — trips and data are fully isolated.
 
 ### Features
 
-- **Live dashboard** – One Telegram message per trip, updated every 15 seconds with upcoming arrivals.
-- **Quick stop info** – Send a stop ID (number) in chat to see all arrivals, updated live for 15 minutes with a **STOP** button to close.
-- **Config wizard** – Use `/aggiungi` and `/elimina` to manage trips and combos directly from Telegram, no file editing needed.
-- **Persistent state** – All active messages are saved in `state.json` and survive restarts. On startup, previous messages are deleted (no orphaned chat messages).
-- **Trips & Combos** – Configure multi-leg trips with boarding and alighting stops.
-- **Automatic names** – Stop and destination names (headsign) are fetched from the API.
-- **Night pause** – No API calls during the configured interval (default 02:00–07:00).
-
-### Structure
-
-```
-tramtram/
-├── main.py              # Main bot
-├── config.json          # Configuration (git-ignored)
-├── requirements.txt     # Python dependencies
-├── state.json           # Persistent state (auto-generated, git-ignored)
-├── README.md
-└── .gitignore
-```
-
-### Requirements
-
-- Python 3.10+
-- A Telegram bot (created via [@BotFather](https://t.me/BotFather))
-
-### Installation
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/lucaosti/tramtram.git
-cd tramtram
-
-# 2. Create and activate the virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Create config.json (see Configuration section)
-```
-
-### Configuration (`config.json`)
-
-```json
-{
-  "telegram": {
-    "bot_token": "TOKEN_FROM_BOTFATHER",
-    "chat_id": 123456789
-  },
-  "otp_base_url": "https://plan.muoversiatorino.it/otp/routers/mato/index",
-  "polling_interval_seconds": 15,
-  "night_pause": { "start_hour": 2, "end_hour": 7 },
-  "trips": [
-    {
-      "name": "Home → Office",
-      "combos": [
-        {
-          "name": "Direct 42",
-          "legs": [
-            {
-              "line": "42",
-              "stop_id_boarding": "1132",
-              "stop_id_alighting": "40"
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-| Field | Description |
+| Feature | Description |
 |---|---|
-| `telegram.bot_token` | Bot token from BotFather |
-| `telegram.chat_id` | Chat ID to send messages |
-| `otp_base_url` | Base API URL for OTP Muoversi a Torino |
-| `polling_interval_seconds` | Update interval in seconds (default: 15) |
-| `night_pause.start_hour` | Night pause start (default: 2) |
-| `night_pause.end_hour` | Night pause end (default: 7) |
-| `trips` | List of trips to monitor |
+| **Live dashboard** | One message per trip, edited in place every 15 s with next arrivals. Green dot (🟢) = GPS realtime. |
+| **Quick stop query** | Send any stop number to see all lines at that stop, live for 15 minutes, with a STOP button to dismiss. |
+| **Add/remove wizard** | `/add` and `/remove` guide you step by step — no config files to edit. |
+| **Multi-user** | Every Telegram user has their own trips; data is stored per chat ID. |
+| **Persistent state** | Trips and message IDs survive bot restarts. |
+| **Night pause** | No API calls between 02:00 and 07:00 (configurable). |
 
-#### Trip structure
+### Commands
 
-```
-Trip (e.g. "Home → Office")
- └── Combo (e.g. "Direct 42", "Combo 16 + 4")
-      └── Leg
-           ├── line                (e.g. "42")
-           ├── stop_id_boarding    (boarding stop)
-           └── stop_id_alighting   (alighting stop)
-```
-
-To find GTT `stop_id`: send the stop number to the bot, or search on [Muoversi a Torino](https://www.muoversiatorino.it/).
-
-### Usage
-
-```bash
-python main.py
-```
-
-#### Telegram commands
-
-| Command | Description |
+| Command | What it does |
 |---|---|
-| `/start` | Create the dashboard with automatic updates |
+| `/start` | Clean up old messages and (re)create the live dashboard |
+| `/add` | Wizard to add a new trip or combo |
+| `/remove` | Wizard to remove a trip or combo |
 | `/refresh` | Force an immediate dashboard update |
-| `<number>` | Send a number to see all arrivals at that stop (15 min, with STOP button) |
-| `/aggiungi` | Wizard to add a new trip or combo |
-| `/elimina` | Wizard to delete a trip or combo |
-| `/annulla` | Cancel the current wizard |
+| `/cancel` | Abort the current wizard |
+| `<number>` | Send a stop ID to get live arrivals for 15 minutes |
 
-#### STOP button
+### How trips work
 
-Stop messages include an inline **🛑 STOP** button. Pressing it deletes the message from chat and removes it from tracking.
+You organize your monitored routes into **trips**, **combos**, and **legs**:
+
+```
+Trip  (e.g. "Home → Office")
+ └── Combo  (e.g. "Direct 42", "Combo 16 + 4")
+      └── Leg
+           ├── line               (e.g. "42")
+           ├── stop_id_boarding   (where you get on)
+           └── stop_id_alighting  (where you get off)
+```
+
+- A **trip** is a named origin-destination pair (e.g. "Home → Office").
+- A **combo** is one way to make that trip — it can have one or more legs (direct or with transfers).
+- A **leg** is a single bus/tram ride: which line, where you board, and where you alight.
+
+All of this is configured interactively through the `/add` wizard. To find GTT stop IDs, send any number to the bot and it will show you the stop name, or look them up on [Muoversi a Torino](https://www.muoversiatorino.it/).
 
 ### Example output
 
-##### Dashboard
+**Dashboard:**
 
 ```
-🚋  Office → Home
+🚋  Home → Office
 ⏱  08:32:15
 
 ━━━  Direct 42  ━━━
@@ -299,7 +70,7 @@ Stop messages include an inline **🛑 STOP** button. Pressing it deletes the me
         ⏳  🟢3'   🟢15'   30'
 ```
 
-##### Quick stop info
+**Quick stop query:**
 
 ```
 🚏  PORTA NUOVA  (40)
@@ -317,3 +88,182 @@ Stop messages include an inline **🛑 STOP** button. Pressing it deletes the me
 
 [🛑 STOP]
 ```
+
+---
+
+## Self-hosting
+
+If the public bot goes offline, you can run your own instance. All you need is a server (or even your own computer), Python, and a Telegram bot token.
+
+### Requirements
+
+- Python 3.10+
+- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+
+### Quick start
+
+```bash
+git clone https://github.com/lucaosti/tramtram.git
+cd tramtram
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+cp .env.example .env
+# Edit .env and set your BOT_TOKEN
+
+python main.py
+```
+
+### Project structure
+
+```
+tramtram/
+├── main.py              # Entire bot (single-file)
+├── .env                 # BOT_TOKEN (git-ignored, you create this)
+├── .env.example         # Template for .env
+├── config.json          # Optional global settings (git-ignored)
+├── data/                # Per-user data (git-ignored, auto-created)
+│   └── <chat_id>.json   # One file per Telegram user
+├── requirements.txt     # Python dependencies
+├── README.md
+└── .gitignore
+```
+
+### Configuration
+
+#### Bot token (`.env`, required)
+
+The only required configuration. Create a `.env` file (or export the variable) with your bot token:
+
+```
+BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxYZ
+```
+
+#### Global settings (`config.json`, optional)
+
+If this file is absent, sensible defaults are used. Create it only to customize behavior:
+
+```json
+{
+  "otp_base_url": "https://plan.muoversiatorino.it/otp/routers/mato/index",
+  "polling_interval_seconds": 15,
+  "night_pause": { "start_hour": 2, "end_hour": 7 }
+}
+```
+
+| Field | Description | Default |
+|---|---|---|
+| `otp_base_url` | Base URL of the OTP API | `https://plan.muoversiatorino.it/otp/routers/mato/index` |
+| `polling_interval_seconds` | Seconds between dashboard updates | `15` |
+| `night_pause.start_hour` | Hour (0–23) when the bot pauses API calls | `2` |
+| `night_pause.end_hour` | Hour (0–23) when the bot resumes | `7` |
+
+#### Per-user data (`data/`)
+
+Each user's trips and message state are automatically saved in `data/<chat_id>.json`. This directory is created on first use — no manual setup needed.
+
+Example file (`data/123456789.json`):
+
+```json
+{
+  "trips": [
+    {
+      "name": "Home → Office",
+      "combos": [
+        {
+          "name": "Direct 42",
+          "legs": [
+            { "line": "42", "stop_id_boarding": "1132", "stop_id_alighting": "40" }
+          ]
+        }
+      ]
+    }
+  ],
+  "state": {
+    "dashboard_msgs": [101, 102],
+    "stop_msgs": {},
+    "all_msg_ids": [101, 102]
+  }
+}
+```
+
+### Architecture
+
+The bot is a single Python file (`main.py`) built on [python-telegram-bot](https://python-telegram-bot.org/) and [httpx](https://www.python-httpx.org/).
+
+**Data flow:**
+
+1. On startup, the bot loads all user files from `data/` and starts a background update loop.
+2. The update loop runs every 15 seconds (skipping night hours). It collects all stop IDs needed across every active user, fetches stoptimes and stop names from the OTP API in a single parallel batch, and edits each user's Telegram messages with fresh data.
+3. When a user sends `/start`, old messages are deleted and new dashboard messages are created (one per trip).
+4. When a user sends a stop number, a live message is created that auto-updates for 15 minutes, then self-destructs.
+
+**Key design decisions:**
+- Messages are edited in place (no spam) and deleted on cleanup.
+- Stop IDs are deduplicated across users, so the same stop is only fetched once per cycle regardless of how many users monitor it.
+- Wizards use a single-message editing pattern: one bot message is reused for every step, and user messages are deleted immediately.
+- The Europe/Rome timezone is computed manually (EU DST rules) to avoid a `pytz`/`zoneinfo` dependency.
+
+### Running on a server
+
+To keep the bot running permanently on a Linux server, use systemd:
+
+Create `/etc/systemd/system/tramtram.service`:
+
+```ini
+[Unit]
+Description=TramTram Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=your-user
+WorkingDirectory=/path/to/tramtram
+EnvironmentFile=/path/to/tramtram/.env
+ExecStart=/path/to/tramtram/.venv/bin/python main.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable tramtram
+sudo systemctl start tramtram
+
+# Check status
+sudo systemctl status tramtram
+
+# View logs
+journalctl -u tramtram -f
+```
+
+### Migration from single-user version
+
+If you're upgrading from an older version that had `bot_token` and `chat_id` inside `config.json`, the bot handles migration automatically on first startup:
+
+1. Trips are moved to `data/<chat_id>.json`.
+2. `config.json` is rewritten with only global settings.
+3. `state.json` is deleted.
+
+You just need to create the `.env` file with your `BOT_TOKEN`.
+
+---
+
+## Dependencies
+
+| Package | Purpose |
+|---|---|
+| [python-telegram-bot](https://python-telegram-bot.org/) | Telegram Bot API framework |
+| [httpx](https://www.python-httpx.org/) | Async HTTP client for OTP API calls |
+| [python-dotenv](https://pypi.org/project/python-dotenv/) | Load `.env` file into environment variables |
+
+## License
+
+MIT
