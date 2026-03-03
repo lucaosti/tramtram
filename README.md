@@ -18,7 +18,7 @@ Each user gets their own independent dashboard — trips and data are fully isol
 
 | Feature | Description |
 |---|---|
-| **Live dashboard** | One message per trip, edited in place every 15 s with next arrivals. Green dot (🟢) = GPS realtime. |
+| **Live dashboard** | One message per trip, edited in place every 15 s with next arrivals. Created on `/start`, auto-deleted after 30 minutes. Green dot (🟢) = GPS realtime. |
 | **Quick stop query** | Send any stop number to see all lines at that stop, live for 15 minutes, with a STOP button to dismiss. |
 | **Add/remove wizard** | `/add` and `/remove` guide you step by step — no config files to edit. |
 | **Multi-user** | Every Telegram user has their own trips; data is stored per chat ID. |
@@ -29,7 +29,7 @@ Each user gets their own independent dashboard — trips and data are fully isol
 
 | Command | What it does |
 |---|---|
-| `/start` | Clean up old messages and (re)create the live dashboard |
+| `/start` | Clean up old messages and create a live dashboard (auto-deleted after 30 min) |
 | `/add` | Wizard to add a new trip or combo |
 | `/remove` | Wizard to remove a trip or combo |
 | `/refresh` | Force an immediate dashboard update |
@@ -62,6 +62,7 @@ All of this is configured interactively through the `/add` wizard. To find GTT s
 ```
 🚋  Home → Office
 ⏱  08:32:15
+⏳  expires in 28 min
 
 ━━━  Direct 42  ━━━
 
@@ -183,6 +184,7 @@ Example file (`data/123456789.json`):
   ],
   "state": {
     "dashboard_msgs": [101, 102],
+    "dashboard_expires": 1709500000,
     "stop_msgs": {},
     "all_msg_ids": [101, 102]
   }
@@ -197,7 +199,7 @@ The bot is a single Python file (`main.py`) built on [python-telegram-bot](https
 
 1. On startup, the bot loads all user files from `data/` and starts a background update loop.
 2. The update loop runs every 15 seconds (skipping night hours). It collects all stop IDs needed across every active user, fetches stoptimes and stop names from the OTP API in a single parallel batch, and edits each user's Telegram messages with fresh data.
-3. When a user sends `/start`, old messages are deleted and new dashboard messages are created (one per trip).
+3. When a user sends `/start`, old messages are deleted and new dashboard messages are created (one per trip). These messages are live-updated for 30 minutes, then automatically deleted.
 4. When a user sends a stop number, a live message is created that auto-updates for 15 minutes, then self-destructs.
 
 **Key design decisions:**

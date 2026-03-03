@@ -10,11 +10,13 @@ Architecture
   config.json; sane defaults are used when the file is absent.
 - Per-user data (trips + message state) is stored in  data/<chat_id>.json  so
   every Telegram user sees only their own dashboard.
+- Dashboard messages are ephemeral: created on /start, live-updated for 30 min,
+  then automatically deleted — just like stop queries (which last 15 min).
 - The bot token is read from the BOT_TOKEN environment variable (.env file).
 
 Commands
 --------
-/start    – Clean up old messages and (re)create the live dashboard.
+/start    – Clean up old messages and (re)create the live dashboard (30 min).
 /add      – Guided wizard to add a trip or combo.
 /remove   – Guided wizard to delete a trip or combo.
 /cancel   – Abort the current wizard.
@@ -75,6 +77,7 @@ LEGACY_STATE_PATH = BASE_DIR / "state.json"
 
 MAX_ARRIVALS = 3                       # arrivals shown per line
 STOP_TTL_SECONDS = 15 * 60            # live stop messages last 15 min
+DASHBOARD_TTL_SECONDS = 30 * 60       # dashboard messages last 30 min
 DEFAULT_UPDATE_INTERVAL = 15           # seconds between dashboard refreshes
 
 DEFAULT_OTP_URL = "https://plan.muoversiatorino.it/otp/routers/mato/index"
@@ -121,6 +124,7 @@ def _default_user_data() -> dict:
         "trips": [],
         "state": {
             "dashboard_msgs": [],      # message IDs for trip dashboard cards
+            "dashboard_expires": 0,    # unix timestamp when dashboard expires
             "stop_msgs": {},            # {msg_id_str: {stop_id, expires}}
             "all_msg_ids": [],          # every msg ID ever sent, for cleanup
         },
@@ -136,6 +140,7 @@ def load_user_data(chat_id: int) -> dict:
             data.setdefault("trips", [])
             data.setdefault("state", {})
             data["state"].setdefault("dashboard_msgs", [])
+            data["state"].setdefault("dashboard_expires", 0)
             data["state"].setdefault("stop_msgs", {})
             data["state"].setdefault("all_msg_ids", [])
             return data
@@ -419,12 +424,15 @@ def format_trip(
     st_map: dict[str, list[dict]],
     nm_map: dict[str, str],
     updated: datetime,
+    expires_in_min: int | None = None,
 ) -> str:
     """Build the dashboard card for one trip (one Telegram message)."""
     now_ts = int(updated.timestamp())
     parts: list[str] = []
     parts.append(f"🚋  *{_esc(trip['name'])}*")
     parts.append(f"⏱  {updated.strftime('%H:%M:%S')}")
+    if expires_in_min is not None and expires_in_min > 0:
+        parts.append(f"⏳  _expires in {expires_in_min} min_")
 
     for combo in trip["combos"]:
         parts.append("")
@@ -502,6 +510,7 @@ def track_dashboard_msgs(app: Application, chat_id: int, mids: list[int]) -> Non
     user = get_user(app, chat_id)
     state = user["state"]
     state["dashboard_msgs"] = mids
+    state["dashboard_expires"] = time.time() + DASHBOARD_TTL_SECONDS
     for m in mids:
         if m not in state["all_msg_ids"]:
             state["all_msg_ids"].append(m)
@@ -554,6 +563,7 @@ async def nuke_user_chat(app: Application, chat_id: int) -> None:
             await _try_delete(app, chat_id, mid)
 
     state["dashboard_msgs"] = []
+    state["dashboard_expires"] = 0
     state["stop_msgs"] = {}
     state["all_msg_ids"] = []
     save_user_data(chat_id, user)
@@ -633,37 +643,49 @@ async def _update_user(
     """Push fresh data into one user's dashboard and stop messages."""
     state = udata.get("state", {})
     trips = udata.get("trips", [])
+    now_unix = time.time()
 
     # ── Dashboard messages ──
     d_msgs = state.get("dashboard_msgs", [])
+    dash_exp = state.get("dashboard_expires", 0)
     if d_msgs:
-        changed = False
-        for i, mid in enumerate(d_msgs):
-            if not mid or i >= len(trips):
-                continue
-            text = format_trip(trips[i], st_map, nm_map, now)
-            try:
-                await app.bot.edit_message_text(
-                    chat_id=chat_id, message_id=mid,
-                    text=text, parse_mode="Markdown",
-                )
-            except BadRequest as e:
-                if "not modified" in str(e).lower():
-                    pass
-                elif "not found" in str(e).lower():
-                    d_msgs[i] = None
-                    changed = True
-                else:
-                    logger.error("Edit trip %d for %d: %s", i, chat_id, e)
-            except (TimedOut, NetworkError) as e:
-                logger.warning("Network trip %d for %d: %s", i, chat_id, e)
-        if changed:
-            state["dashboard_msgs"] = d_msgs
+        # Check dashboard expiry
+        if dash_exp and now_unix >= dash_exp:
+            for mid in d_msgs:
+                if mid:
+                    await _try_delete(app, chat_id, mid)
+            state["dashboard_msgs"] = []
+            state["dashboard_expires"] = 0
             save_user_data(chat_id, udata)
+            logger.info("Dashboard expired for %d, removed.", chat_id)
+        else:
+            exp_min = max(1, int((dash_exp - now_unix) / 60)) if dash_exp else None
+            changed = False
+            for i, mid in enumerate(d_msgs):
+                if not mid or i >= len(trips):
+                    continue
+                text = format_trip(trips[i], st_map, nm_map, now, exp_min)
+                try:
+                    await app.bot.edit_message_text(
+                        chat_id=chat_id, message_id=mid,
+                        text=text, parse_mode="Markdown",
+                    )
+                except BadRequest as e:
+                    if "not modified" in str(e).lower():
+                        pass
+                    elif "not found" in str(e).lower():
+                        d_msgs[i] = None
+                        changed = True
+                    else:
+                        logger.error("Edit trip %d for %d: %s", i, chat_id, e)
+                except (TimedOut, NetworkError) as e:
+                    logger.warning("Network trip %d for %d: %s", i, chat_id, e)
+            if changed:
+                state["dashboard_msgs"] = d_msgs
+                save_user_data(chat_id, udata)
 
     # ── Stop messages + expiry ──
     s_msgs = dict(state.get("stop_msgs", {}))
-    now_unix = time.time()
     expired: list[int] = []
 
     for mid_s, info in s_msgs.items():
@@ -721,9 +743,9 @@ WELCOME_TEXT = (
     "then add one or more routes (line + boarding and alighting stop IDs). "
     "You can also send a *stop number* in chat to see all arrivals at that stop for 15 minutes.\n\n"
     "*Commands*\n"
+    "• /start — show your dashboard (live for 30 min)\n"
     "• /add — add a trip or route\n"
     "• /remove — remove a trip or route\n"
-    "• /start — show this message or rebuild your dashboard\n"
     "• /refresh — update the dashboard now\n"
     "• Send a *number* — live arrivals at that stop (15 min)\n\n"
     "Stop IDs can be found on [Muoversi a Torino](https://www.muoversiatorino.it/) "
@@ -752,10 +774,11 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     all_sids = collect_all_stop_ids(trips)
     st_map, nm_map = await fetch_all_stops(all_sids, base)
     now = now_rome()
+    exp_min = DASHBOARD_TTL_SECONDS // 60
 
     mids: list[int] = []
     for trip in trips:
-        text = format_trip(trip, st_map, nm_map, now)
+        text = format_trip(trip, st_map, nm_map, now, exp_min)
         msg = await ctx.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
         mids.append(msg.message_id)
 
@@ -782,13 +805,16 @@ async def cmd_refresh(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     all_sids = collect_all_stop_ids(trips)
     st_map, nm_map = await fetch_all_stops(all_sids, base)
     now = now_rome()
+    now_unix = time.time()
 
     d_msgs = state.get("dashboard_msgs", [])
+    dash_exp = state.get("dashboard_expires", 0)
     if d_msgs:
+        exp_min = max(1, int((dash_exp - now_unix) / 60)) if dash_exp and now_unix < dash_exp else None
         for i, mid in enumerate(d_msgs):
             if not mid or i >= len(trips):
                 continue
-            text = format_trip(trips[i], st_map, nm_map, now)
+            text = format_trip(trips[i], st_map, nm_map, now, exp_min)
             try:
                 await ctx.bot.edit_message_text(
                     chat_id=chat_id, message_id=mid,
@@ -797,9 +823,10 @@ async def cmd_refresh(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             except BadRequest:
                 pass
     else:
+        exp_min = DASHBOARD_TTL_SECONDS // 60
         mids: list[int] = []
         for trip in trips:
-            text = format_trip(trip, st_map, nm_map, now)
+            text = format_trip(trip, st_map, nm_map, now, exp_min)
             msg = await ctx.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
             mids.append(msg.message_id)
         track_dashboard_msgs(ctx.application, chat_id, mids)
@@ -879,16 +906,18 @@ async def rebuild_dashboard(app: Application, chat_id: int) -> None:
 
     if not trips:
         state["dashboard_msgs"] = []
+        state["dashboard_expires"] = 0
         save_user_data(chat_id, user)
         return
 
     all_sids = collect_all_stop_ids(trips)
     st_map, nm_map = await fetch_all_stops(all_sids, base)
     now = now_rome()
+    exp_min = DASHBOARD_TTL_SECONDS // 60
 
     mids: list[int] = []
     for trip in trips:
-        text = format_trip(trip, st_map, nm_map, now)
+        text = format_trip(trip, st_map, nm_map, now, exp_min)
         msg = await app.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
         mids.append(msg.message_id)
     track_dashboard_msgs(app, chat_id, mids)
