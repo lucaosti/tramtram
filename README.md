@@ -23,7 +23,7 @@ Each user gets their own independent dashboard — trips and data are fully isol
 | **Add/remove wizard** | `/add` and `/remove` guide you step by step — no config files to edit. |
 | **Multi-user** | Every Telegram user has their own trips; data is stored per chat ID. |
 | **Persistent state** | Trips and message IDs survive bot restarts. |
-| **Night pause** | No API calls between 02:00 and 07:00 (configurable). |
+| **Night pause** | Optional: no API calls between 02:00 and 07:00. Set `"night_pause": false` in config for 24/7 updates. |
 
 ### Commands
 
@@ -154,12 +154,13 @@ If this file is absent, sensible defaults are used. Create it only to customize 
 }
 ```
 
+Set `"night_pause": false` to disable the pause and run 24/7.
+
 | Field | Description | Default |
 |---|---|---|
 | `otp_base_url` | Base URL of the OTP API | `https://plan.muoversiatorino.it/otp/routers/mato/index` |
 | `polling_interval_seconds` | Seconds between dashboard updates | `15` |
-| `night_pause.start_hour` | Hour (0–23) when the bot pauses API calls | `2` |
-| `night_pause.end_hour` | Hour (0–23) when the bot resumes | `7` |
+| `night_pause` | `false` = no pause (24/7). Object with `start_hour`/`end_hour` = pause in that window. | `{ "start_hour": 2, "end_hour": 7 }` |
 
 #### Per-user data (`data/`)
 
@@ -198,7 +199,7 @@ The bot is a single Python file (`main.py`) built on [python-telegram-bot](https
 **Data flow:**
 
 1. On startup, the bot loads all user files from `data/` and starts a background update loop.
-2. The update loop runs every 15 seconds (skipping night hours). It collects all stop IDs needed across every active user, fetches stoptimes and stop names from the OTP API in a single parallel batch, and edits each user's Telegram messages with fresh data.
+2. The update loop runs every 15 seconds (skipping night hours when `night_pause` is set in config). It collects all stop IDs needed across every active user, fetches stoptimes and stop names from the OTP API in a single parallel batch, and edits each user's Telegram messages with fresh data.
 3. When a user sends `/start`, old messages are deleted and new dashboard messages are created (one per trip). These messages are live-updated for 30 minutes, then automatically deleted.
 4. When a user sends a stop number, a live message is created that auto-updates for 15 minutes, then self-destructs.
 

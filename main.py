@@ -78,6 +78,8 @@ LEGACY_STATE_PATH = BASE_DIR / "state.json"
 MAX_ARRIVALS = 3                       # arrivals shown per line
 STOP_TTL_SECONDS = 15 * 60            # live stop messages last 15 min
 DASHBOARD_TTL_SECONDS = 30 * 60       # dashboard messages last 30 min
+# Delay between sending consecutive dashboard messages (avoids Telegram rate limiting).
+DASHBOARD_SEND_DELAY = 0.35
 DEFAULT_UPDATE_INTERVAL = 15           # seconds between dashboard refreshes
 
 DEFAULT_OTP_URL = "https://plan.muoversiatorino.it/otp/routers/mato/index"
@@ -779,8 +781,12 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     mids: list[int] = []
     for trip in trips:
         text = format_trip(trip, st_map, nm_map, now, exp_min)
-        msg = await ctx.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
-        mids.append(msg.message_id)
+        try:
+            msg = await ctx.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
+            mids.append(msg.message_id)
+        except (BadRequest, TimedOut, NetworkError) as e:
+            logger.warning("Send trip message for %d: %s", chat_id, e)
+        await asyncio.sleep(DASHBOARD_SEND_DELAY)
 
     track_dashboard_msgs(ctx.application, chat_id, mids)
     logger.info("/start for %d → %d messages.", chat_id, len(mids))
@@ -827,8 +833,12 @@ async def cmd_refresh(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         mids: list[int] = []
         for trip in trips:
             text = format_trip(trip, st_map, nm_map, now, exp_min)
-            msg = await ctx.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
-            mids.append(msg.message_id)
+            try:
+                msg = await ctx.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
+                mids.append(msg.message_id)
+            except (BadRequest, TimedOut, NetworkError) as e:
+                logger.warning("Send trip message for %d: %s", chat_id, e)
+            await asyncio.sleep(DASHBOARD_SEND_DELAY)
         track_dashboard_msgs(ctx.application, chat_id, mids)
 
     logger.info("/refresh for %d ok.", chat_id)
@@ -918,8 +928,12 @@ async def rebuild_dashboard(app: Application, chat_id: int) -> None:
     mids: list[int] = []
     for trip in trips:
         text = format_trip(trip, st_map, nm_map, now, exp_min)
-        msg = await app.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
-        mids.append(msg.message_id)
+        try:
+            msg = await app.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
+            mids.append(msg.message_id)
+        except (BadRequest, TimedOut, NetworkError) as e:
+            logger.warning("Send trip message for %d: %s", chat_id, e)
+        await asyncio.sleep(DASHBOARD_SEND_DELAY)
     track_dashboard_msgs(app, chat_id, mids)
 
 # ────────────────────────────────────────────────────────────────────────────
